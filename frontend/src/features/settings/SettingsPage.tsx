@@ -15,6 +15,7 @@ import { PageBody, PageHeader } from "@/components/common/PageHeader";
 import { supabase, callFunction } from "@/lib/supabase";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useSupportContacts } from "@/features/account/AccountGuards";
+import { CurrencySelect } from "@/components/common/CurrencySelect";
 
 const TIMEZONES: string[] = (() => { try { return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf("timeZone"); } catch { return ["UTC"]; } })();
 const COUNTRIES: Array<{ code: string; name: string }> = (() => {
@@ -60,14 +61,14 @@ export default function SettingsPage() {
 
 function BusinessSection({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => void }) {
   const { workspace } = useAuth();
-  const [f, setF] = useState({ name: workspace!.name, country: workspace!.country ?? "", timezone: workspace!.timezone, notify_email: workspace!.notify_email ?? "" });
+  const [f, setF] = useState({ name: workspace!.name, country: workspace!.country ?? "", timezone: workspace!.timezone, currency: workspace!.currency, notify_email: workspace!.notify_email ?? "" });
   const [busy, setBusy] = useState(false);
-  const dirty = f.name !== workspace!.name || f.country !== (workspace!.country ?? "") || f.timezone !== workspace!.timezone || f.notify_email !== (workspace!.notify_email ?? "");
+  const dirty = f.name !== workspace!.name || f.country !== (workspace!.country ?? "") || f.timezone !== workspace!.timezone || f.currency !== workspace!.currency || f.notify_email !== (workspace!.notify_email ?? "");
   const save = async () => {
     if (!f.name.trim()) return toast.error("Business name can't be empty.");
     if (f.notify_email && !/^\S+@\S+\.\S+$/.test(f.notify_email)) return toast.error("That alert email doesn't look right.");
     setBusy(true);
-    const { error } = await supabase.from("workspaces").update({ name: f.name.trim().slice(0, 120), country: f.country || null, timezone: f.timezone, notify_email: f.notify_email.trim() || null }).eq("id", workspace!.id);
+    const { error } = await supabase.from("workspaces").update({ name: f.name.trim().slice(0, 120), country: f.country || null, timezone: f.timezone, currency: f.currency, notify_email: f.notify_email.trim() || null }).eq("id", workspace!.id);
     setBusy(false);
     if (error) toast.error("Couldn't save. Please try again."); else { toast.success("Saved"); onSaved(); }
   };
@@ -86,6 +87,9 @@ function BusinessSection({ canEdit, onSaved }: { canEdit: boolean; onSaved: () =
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-72">{(TIMEZONES.includes(f.timezone) ? TIMEZONES : [f.timezone, ...TIMEZONES]).map((t) => <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
           </Select>
+        </Field>
+        <Field label="Default currency" hint="Used for new agents. Each agent's prices can use its own currency in Knowledge.">
+          <CurrencySelect value={f.currency} disabled={!canEdit} onChange={(v) => setF({ ...f, currency: v })} />
         </Field>
         <Field label="Alert email (optional)" hint="Where we send billing and account alerts. Defaults to your sign-in email.">
           <Input type="email" value={f.notify_email} disabled={!canEdit} placeholder="owner@yourbusiness.com" onChange={(e) => setF({ ...f, notify_email: e.target.value })} />

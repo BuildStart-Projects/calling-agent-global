@@ -26,7 +26,9 @@ const STYLES: Array<{ key: ChannelConfig["persona_style"]; label: string; hint: 
 const FILTERS = ["all", "warm", "clear", "energetic", "deep", "professional"] as const;
 const GRADIENTS = ["from-emerald-400 to-lime-300", "from-green-600 to-emerald-400", "from-lime-400 to-green-500", "from-teal-500 to-green-400", "from-green-700 to-lime-400"];
 
+/** Same counting rules as the server: for scripts without spaces (Japanese, Chinese, Thai…) ~3 characters = 1 word. */
 function words(text: string, locale: string) {
+  if (/^(ja|zh|th|lo|km|my|bo)\b/i.test(locale)) return Math.ceil([...text].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length / 3);
   try { return [...new Intl.Segmenter(locale, { granularity: "word" }).segment(text)].filter((s) => s.isWordLike).length; }
   catch { return text.trim().split(/\s+/).filter(Boolean).length; }
 }
@@ -52,6 +54,10 @@ export default function VoicePage() {
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const translateSeq = useRef(0);
+  const defaultSample = useRef("");
+  const initialTranslated = useRef(false);
 
   useEffect(() => {
     if (!calling) return;
@@ -64,7 +70,46 @@ export default function VoicePage() {
   }, [calling]);
 
   const businessName = k?.blueprint.business?.name ?? "our business";
-  useEffect(() => { if (!sample) setSample(`Hi! Thanks for calling ${businessName}. How can I help?`.split(/\s+/).slice(0, 10).join(" ")); }, [businessName, sample]);
+  useEffect(() => {
+    if (sample) return;
+    const text = `Hi! Thanks for calling ${businessName}. How can I help?`.split(/\s+/).slice(0, 10).join(" ");
+    defaultSample.current = text;
+    setSample(text);
+  }, [businessName, sample]);
+
+  /** Translates the preview text into `lang` (billed to the Orchestrator). Results are reused for this session. */
+  const translateSample = async (lang: string, text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    const key = `bs.previewTr|${lang}|${t}`;
+    const cached = sessionStorage.getItem(key);
+    if (cached) { setSample(cached); return; }
+    const seq = ++translateSeq.current;
+    setTranslating(true);
+    try {
+      const res = await callFunction<{ text: string }>("voice-preview", { action: "translate", language: lang, text: t, agent_id: id });
+      if (seq !== translateSeq.current) return; // a newer language was picked meanwhile
+      sessionStorage.setItem(key, res.text);
+      sessionStorage.setItem(`bs.previewTr|${language ?? ""}|${res.text}`, t); // switching back restores the original for free
+      setSample(res.text);
+    } catch (e) {
+      if (seq === translateSeq.current) toast.error((e as Error).message || "Couldn't translate the preview text. You can type it yourself.");
+    } finally {
+      if (seq === translateSeq.current) setTranslating(false);
+    }
+  };
+  const onLanguageChange = (lang: string) => {
+    if (lang === language) return;
+    setLanguage(lang);
+    void translateSample(lang, sample);
+  };
+  // The default greeting is written in English; translate it once if the agent's language is different.
+  useEffect(() => {
+    if (initialTranslated.current || !language || !sample || sample !== defaultSample.current) return;
+    initialTranslated.current = true;
+    if (!language.toLowerCase().startsWith("en")) void translateSample(language, sample);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, sample]);
 
   const wc = words(sample, language ?? "en");
   const voices = useMemo(() => (catalogs?.voices ?? []).filter((v) => filter === "all" || v.tags.includes(filter)), [catalogs, filter]);
@@ -72,11 +117,12 @@ export default function VoicePage() {
 
   const play = async (name: string) => {
     if (playing === name) { audio.current?.pause(); setPlaying(null); return; }
+    if (translating) return;
     if (wc === 0 || wc > 10) { toast.error("Use up to 10 words for the preview."); return; }
     audio.current?.pause();
     setLoadingVoice(name);
     try {
-      const res = await callFunction<{ url: string }>("voice-preview", { voice: name, language, style, text: sample });
+      const res = await callFunction<{ url: string }>("voice-preview", { voice: name, language, style, text: sample, agent_id: id });
       const a = new Audio(res.url);
       audio.current = a;
       a.onended = () => setPlaying(null);
@@ -121,7 +167,7 @@ export default function VoicePage() {
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2">
           <Label>Default language</Label>
-          <LanguagePicker value={language} onChange={setLanguage} languages={catalogs.languages} />
+          <LanguagePicker value={language} onChange={onLanguageChange} languages={catalogs.languages} />
           <label className="flex items-start gap-3 pt-2 text-sm">
             <Switch checked={adapt} onCheckedChange={setAdapt} className="mt-0.5" />
             <span><span className="font-medium">Adapt to the caller's language</span><br /><span className="text-muted-foreground">Starts in {langLabel?.label ?? "your language"}, switches if the caller speaks another.</span></span>
@@ -129,8 +175,11 @@ export default function VoicePage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="sample">Preview text <span className={cn("ml-1 tabular", wc > 10 ? "text-destructive" : "text-muted-foreground")}>{wc}/10 words</span></Label>
-          <Input id="sample" value={sample} onChange={(e) => setSample(e.target.value)} maxLength={120} aria-invalid={wc > 10} />
-          <p className="text-xs text-muted-foreground">Type in any language — previews speak it in {langLabel?.label ?? "the selected language"}.</p>
+          <div className="relative">
+            <Input id="sample" value={sample} onChange={(e) => { translateSeq.current++; setTranslating(false); setSample(e.target.value); }} maxLength={120} aria-invalid={wc > 10} disabled={translating} className={cn(translating && "pr-10")} />
+            {translating && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-label="Translating" />}
+          </div>
+          <p className="text-xs text-muted-foreground">{translating ? `Translating into ${langLabel?.label ?? "the selected language"}…` : `Translated into ${langLabel?.label ?? "the selected language"} automatically when you change language. You can edit it.`}</p>
         </div>
       </div>
 

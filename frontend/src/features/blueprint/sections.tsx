@@ -14,6 +14,39 @@ import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import type { CatalogItem, Faq, Knowledge } from "@/features/knowledge/useAgentKnowledge";
 import { InlineField, Section, SourceBadge, formatPrice, useFlash } from "./fields";
+import { CurrencySelect } from "@/components/common/CurrencySelect";
+import { useAuth } from "@/features/auth/AuthProvider";
+
+/** The currency prices are in: the business's choice, else the workspace default. */
+function useBusinessCurrency(k: Knowledge) {
+  const { workspace } = useAuth();
+  return k.blueprint.business?.currency ?? workspace?.currency ?? "USD";
+}
+
+function PricesInField({ k }: { k: Knowledge }) {
+  const qc = useQueryClient();
+  const current = useBusinessCurrency(k);
+  const [busy, setBusy] = useState(false);
+  const change = async (code: string) => {
+    if (code === current) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc("set_business_currency", { p_agent: k.agent.id, p_currency: code });
+    setBusy(false);
+    if (error) { toast.error("Couldn't change the currency."); return; }
+    qc.invalidateQueries({ queryKey: ["knowledge", k.agent.id] });
+    const n = Number(data ?? 0);
+    toast.success(`Prices are now in ${code}${n ? ` · ${n} item${n === 1 ? "" : "s"} updated` : ""}`);
+  };
+  return (
+    <div className="space-y-1 py-1.5">
+      <Label className="text-xs text-muted-foreground">Prices in</Label>
+      <div className="flex items-center gap-2">
+        <CurrencySelect value={current} onChange={change} disabled={busy} size="sm" className="max-w-xs" />
+        {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      </div>
+    </div>
+  );
+}
 
 type Flash = Record<string, number>;
 
@@ -33,6 +66,7 @@ export function BusinessSection({ k, flash }: { k: Knowledge; flash: Flash }) {
           <InlineField agentId={id} meta={k.fieldMeta} path="business.address" label="Address" value={b.address} flashStamp={flash["business.address"]} />
           <InlineField agentId={id} meta={k.fieldMeta} path="business.service_area" label="Service area" value={b.service_area} flashStamp={flash["business.service_area"]} />
           <InlineField agentId={id} meta={k.fieldMeta} path="business.website" label="Website" value={b.website} flashStamp={flash["business.website"]} />
+          <PricesInField k={k} />
         </div>
       </Section>
       <HandoffCard k={k} flashStamp={flash.handoff_phone} />
@@ -94,6 +128,7 @@ export function CatalogSection({ k, flash }: { k: Knowledge; flash: Flash }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Partial<CatalogItem> | null>(null);
   const [deleting, setDeleting] = useState<CatalogItem | null>(null);
+  const businessCurrency = useBusinessCurrency(k);
   const kind: "service" | "product" = k.agent.type === "order" ? "product" : "service";
   const label = kind === "service" ? "Services" : "Products";
 
@@ -113,7 +148,7 @@ export function CatalogSection({ k, flash }: { k: Knowledge; flash: Flash }) {
           {k.catalog.map((c) => <CatalogRow key={c.id} item={c} flashStamp={flash[`catalog.${c.ref}`]} onEdit={() => setEditing(c)} onDelete={() => setDeleting(c)} />)}
         </ul>
       )}
-      {editing && <CatalogDialog agentId={k.agent.id} item={editing} defaultCurrency={k.blueprint.business?.currency ?? "USD"} onClose={() => setEditing(null)} />}
+      {editing && <CatalogDialog agentId={k.agent.id} item={editing} defaultCurrency={businessCurrency} onClose={() => setEditing(null)} />}
       <AlertDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -157,6 +192,7 @@ function CatalogDialog({ agentId, item, defaultCurrency, onClose }: { agentId: s
   const [price, setPrice] = useState(item.price_minor != null ? String(item.price_minor / 100) : "");
   const [from, setFrom] = useState(item.price_from ?? false);
   const [duration, setDuration] = useState(item.duration_minutes ? String(item.duration_minutes) : "");
+  const [currency, setCurrency] = useState(item.currency ?? defaultCurrency);
   const [saving, setSaving] = useState(false);
   const isService = (item.kind ?? "service") === "service";
 
@@ -166,7 +202,7 @@ function CatalogDialog({ agentId, item, defaultCurrency, onClose }: { agentId: s
     const row = {
       agent_id: agentId, kind: item.kind ?? "service", name: name.trim(), description: description.trim() || null,
       price_minor: price.trim() ? Math.round(Number(price) * 100) : null, price_from: from,
-      currency: item.currency ?? defaultCurrency, duration_minutes: isService && duration ? Number(duration) : null,
+      currency, duration_minutes: isService && duration ? Number(duration) : null,
     };
     const { error } = item.id
       ? await supabase.from("catalog_items").update(row).eq("id", item.id)
@@ -188,6 +224,7 @@ function CatalogDialog({ agentId, item, defaultCurrency, onClose }: { agentId: s
         <div className="space-y-4">
           <div className="space-y-1.5"><Label htmlFor="c-name">Name</Label><Input id="c-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></div>
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><Label>Currency</Label><CurrencySelect value={currency} onChange={setCurrency} size="sm" /></div>
             <div className="space-y-1.5"><Label htmlFor="c-price">Price</Label><Input id="c-price" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} placeholder="Optional" /></div>
             {isService && <div className="space-y-1.5"><Label htmlFor="c-dur">Duration (min)</Label><Input id="c-dur" inputMode="numeric" value={duration} onChange={(e) => setDuration(e.target.value.replace(/\D/g, ""))} placeholder="e.g. 45" /></div>}
           </div>

@@ -140,6 +140,8 @@ async function runTurn(a: TurnArgs) {
 
   for (let round = 0; round < 2; round++) {
     const snapshot = await loadSnapshot(db, agent);
+    // Prices default to the business's chosen currency (set by the owner or stated in chat), else the workspace's.
+    toolCtx.workspace.currency = snapshot.blueprint.business?.currency ?? workspace.currency;
     const ready = readiness(agent.type, snapshot);
     const remaining = Math.max(0, session.max_questions - questionsAsked);
     const onboarding = session.mode === "onboarding";
@@ -266,7 +268,7 @@ async function buildSystemPrompt(db: TurnArgs["db"], p: {
   const countryName = p.workspace.country ? new Intl.DisplayNames(["en"], { type: "region" }).of(p.workspace.country) ?? p.workspace.country : "the owner's country";
   const vars = {
     max_questions: p.session.max_questions, questions_asked: p.questionsAsked, questions_remaining: p.remaining,
-    workspace_currency: p.workspace.currency, workspace_timezone: p.workspace.timezone, workspace_country_name: countryName,
+    workspace_currency: p.snapshot.blueprint.business?.currency ?? p.workspace.currency, workspace_timezone: p.workspace.timezone, workspace_country_name: countryName,
     agent_type_label: TYPE_LABEL[p.agent.type as AgentType], is_booking: p.agent.type === "booking",
     missing_required: p.missing.length ? p.missing.join("; ") : "none — everything required is in place",
     locked_fields: p.snapshot.lockedFields.join(", ") || "none",

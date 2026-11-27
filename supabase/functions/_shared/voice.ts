@@ -74,7 +74,25 @@ export function pcmToWav(pcm: Uint8Array, sampleRate = 24000): Uint8Array {
 }
 
 /** Counts words in any script (CJK-safe). */
+/** Languages written without spaces between words: the segmenter over-splits them, so ~3 characters count as one word. */
+const NO_SPACE = /^(ja|zh|th|lo|km|my|bo)\b/i;
+const letters = (text: string) => [...text].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length;
+
 export function wordCount(text: string, locale = "en"): number {
+  if (NO_SPACE.test(locale)) return Math.ceil(letters(text) / 3);
   const seg = new Intl.Segmenter(locale, { granularity: "word" });
   return [...seg.segment(text)].filter((s) => s.isWordLike).length;
+}
+
+/** Cuts text to at most `max` words (same counting rules as wordCount). */
+export function truncateWords(text: string, locale: string, max: number): string {
+  if (wordCount(text, locale) <= max) return text;
+  if (NO_SPACE.test(locale)) {
+    let n = 0, out = "";
+    for (const ch of text) { if (/[\p{L}\p{N}]/u.test(ch) && ++n > max * 3) break; out += ch; }
+    return out.trim();
+  }
+  let n = 0, cut = text.length;
+  for (const s of new Intl.Segmenter(locale, { granularity: "word" }).segment(text)) { if (s.isWordLike && ++n > max) { cut = s.index; break; } }
+  return text.slice(0, cut).trim();
 }
