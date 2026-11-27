@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { BellRing, CheckCircle2, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { AsYouType, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,14 @@ export default function HandoffPage() {
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  useEffect(() => { if (k?.agent.handoff_phone_e164 && !phone) setPhone(k.agent.handoff_phone_e164); }, [k, phone]);
+  // Load the saved number once; after that the field belongs to the user (clearing it must not refill it).
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (loaded.current || !k) return;
+    loaded.current = true;
+    const saved = k.agent.handoff_phone_e164;
+    if (saved) setPhone(parsePhoneNumberFromString(saved)?.formatInternational() ?? saved);
+  }, [k]);
 
   const parsed = parsePhoneNumberFromString(phone, (workspace?.country ?? undefined) as CountryCode | undefined);
   const valid = Boolean(parsed?.isValid());
@@ -51,7 +58,8 @@ export default function HandoffPage() {
           <div className="space-y-1.5">
             <Label htmlFor="phone">Your personal WhatsApp number</Label>
             <Input id="phone" className="h-12 text-lg tabular" value={phone} placeholder="+1 415 555 0123" inputMode="tel" autoComplete="tel"
-              onChange={(e) => setPhone(new AsYouType((workspace?.country ?? undefined) as CountryCode | undefined).input(e.target.value))} />
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d+\s().-]/g, "").slice(0, 32))}
+              onBlur={() => { if (parsed?.isValid()) setPhone(parsed.formatInternational()); }} />
             <p className="text-xs text-muted-foreground">{phone && !valid ? "That doesn't look like a complete number yet." : "Must be different from the business number your agent uses."}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">

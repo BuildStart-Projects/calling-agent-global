@@ -7,6 +7,7 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from "@/features/auth/guards";
 import { AppLayout } from "@/app/layouts/AppLayout";
 import { FullPageSpinner } from "@/components/common/FullPageSpinner";
+import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 
 const LandingPage = lazy(() => import("@/pages/public/LandingPage"));
 const LegalPage = lazy(() => import("@/pages/public/LegalPage"));
@@ -47,6 +48,12 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },
 });
 
+/** Resets the error boundary on navigation so one broken page doesn't block the rest of the app. */
+function RouteErrorBoundary({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  return <AppErrorBoundary key={pathname}>{children}</AppErrorBoundary>;
+}
+
 /** Public marketing/auth pages are light-only; the app follows the user's preference. */
 function ThemedShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -64,6 +71,7 @@ export default function App() {
       <BrowserRouter>
         <ThemedShell>
           <AuthProvider>
+            <RouteErrorBoundary>
             <Suspense fallback={<FullPageSpinner />}>
               <Routes>
                 <Route path="/" element={<LandingPage />} />
@@ -113,6 +121,7 @@ export default function App() {
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>
+            </RouteErrorBoundary>
             <Toaster position="top-center" richColors closeButton />
           </AuthProvider>
         </ThemedShell>

@@ -54,5 +54,6 @@ export async function requirePlatformAdmin(req: Request) {
 export function publicUrl(url: string | null): string | null {
   const pub = Deno.env.get("PUBLIC_SUPABASE_URL");
   if (!url || !pub) return url;
-  try { const u = new URL(url); const p = new URL(pub); u.protocol = p.protocol; u.host = p.host; return u.toString(); } catch { return url; }
+  // Replace scheme, hostname AND port: assigning `host` without a port keeps the internal one (e.g. api-gw:8000).
+  try { const u = new URL(url); const p = new URL(pub); u.protocol = p.protocol; u.hostname = p.hostname; u.port = p.port; return u.toString(); } catch { return url; }
 }
