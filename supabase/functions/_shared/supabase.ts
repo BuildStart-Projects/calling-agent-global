@@ -34,7 +34,7 @@ export async function requireAgentAccess(req: Request, agentId: string, roles: A
   const { data: m } = await db.from("workspace_members").select("role").eq("workspace_id", agent.workspace_id).eq("user_id", user.id).maybeSingle();
   if (!m || !roles.includes(m.role)) throw new HttpError(404, "not_found", "Agent not found.");
   const { data: ws } = await db.from("workspaces").select("*").eq("id", agent.workspace_id).single();
-  if (ws.status !== "active") throw new HttpError(403, "workspace_suspended", "This workspace is suspended. Please contact support.");
+  if (ws.status !== "active") throw new HttpError(403, ws.status === "pending_deletion" ? "workspace_deleting" : "workspace_suspended", ws.status === "pending_deletion" ? "This workspace is scheduled for deletion. Contact support to restore it." : "This workspace is suspended. Please contact support.");
   return { user, agent, workspace: ws, role: m.role as MemberContext["role"], db };
 }
 

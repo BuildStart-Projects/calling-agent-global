@@ -71,7 +71,7 @@ export function WorkspacesPage() {
           <tbody>
             {isLoading ? <tr><td colSpan={7} className="p-4"><Skeleton className="h-24" /></td></tr> : (data ?? []).map((w) => (
               <tr key={w.id} onClick={() => setOpen(w.id)} className="cursor-pointer border-b last:border-0 hover:bg-muted/40">
-                <td className="px-4 py-2.5"><p className="font-medium">{w.name} {w.status === "suspended" && <span className="ml-1 rounded bg-destructive/15 px-1.5 text-[10px] text-destructive">suspended</span>}</p><p className="text-xs text-muted-foreground">{w.owner_email}{w.country ? ` · ${w.country}` : ""}</p></td>
+                <td className="px-4 py-2.5"><p className="font-medium">{w.name} {w.status !== "active" && <span className="ml-1 rounded bg-destructive/15 px-1.5 text-[10px] text-destructive">{w.status === "pending_deletion" ? "deleting" : w.status}</span>}</p><p className="text-xs text-muted-foreground">{w.owner_email}{w.country ? ` · ${w.country}` : ""}</p></td>
                 <td className="capitalize">{w.plan_key}</td>
                 <td className={cn("text-right tabular", w.balance < 0 && "text-destructive")}>{num(w.balance, 1)}</td>
                 <td className="text-right tabular">{num(w.credits_30d, 1)}</td>
@@ -91,7 +91,7 @@ export function WorkspacesPage() {
 }
 
 type Detail = {
-  workspace: { id: string; name: string; status: string; country: string | null; timezone: string; currency: string; plan_period_end: string | null; created_at: string; has_stripe: boolean };
+  workspace: { id: string; name: string; status: string; country: string | null; timezone: string; currency: string; plan_period_end: string | null; created_at: string; has_stripe: boolean; deletion_scheduled_for?: string | null; deletion_reason?: string | null };
   plan: { id: string; name: string; key: string } | null;
   members: Array<{ user_id: string; role: string; email: string; name: string | null; last_sign_in_at: string | null }>;
   agents: Array<{ id: string; name: string; type: string; status: string; wa_status: string; wa_phone: string | null }>;
@@ -141,7 +141,8 @@ function WorkspaceDetail({ id }: { id: string }) {
               <Select onValueChange={(v) => run("plan", { action: "set_plan", workspace_id: id, plan_id: v }, "Plan changed")}><SelectTrigger className="w-44"><SelectValue placeholder={d.plan?.name ?? "Choose"} /></SelectTrigger><SelectContent>{cfg?.plans.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>
             {d.workspace.status === "active"
               ? <Button variant="outline" className="text-destructive" disabled={Boolean(busy)} onClick={() => confirm("Suspend this workspace? Its agents and campaigns pause immediately.") && run("status", { action: "set_workspace_status", workspace_id: id, status: "suspended" }, "Suspended")}>Suspend</Button>
-              : <Button variant="outline" disabled={Boolean(busy)} onClick={() => run("status", { action: "set_workspace_status", workspace_id: id, status: "active" }, "Reactivated")}>Reactivate</Button>}
+              : <Button variant="outline" disabled={Boolean(busy)} onClick={() => run("status", { action: "set_workspace_status", workspace_id: id, status: "active" }, d.workspace.status === "pending_deletion" ? "Restored" : "Reactivated")}>{d.workspace.status === "pending_deletion" ? "Restore (cancel deletion)" : "Reactivate"}</Button>}
+            {d.workspace.status === "pending_deletion" && <p className="w-full text-xs text-destructive">Owner requested deletion. Data is erased on {d.workspace.deletion_scheduled_for ? new Date(d.workspace.deletion_scheduled_for).toLocaleDateString() : "—"}{d.workspace.deletion_reason ? ` · “${d.workspace.deletion_reason}”` : ""}. Restoring keeps the data; the owner must re-link WhatsApp.</p>}
           </div>
         </Card>
 

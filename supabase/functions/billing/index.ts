@@ -20,7 +20,7 @@ serveHandler("billing", async (req) => {
   const { data: m } = await db.from("workspace_members").select("role, workspace:workspaces(*)").eq("user_id", user.id).in("role", ["owner", "admin"]).limit(1).maybeSingle();
   if (!m?.workspace) throw new HttpError(403, "forbidden", "Only the workspace owner or an admin can manage billing.");
   const ws = m.workspace as unknown as Record<string, any>;
-  if (ws.status !== "active") throw new HttpError(403, "workspace_suspended", "This workspace is suspended. Please contact support.");
+  if (ws.status !== "active") throw new HttpError(403, ws.status === "pending_deletion" ? "workspace_deleting" : "workspace_suspended", ws.status === "pending_deletion" ? "This workspace is scheduled for deletion. Contact support to restore it." : "This workspace is suspended. Please contact support.");
   const { data: sub } = await db.from("subscriptions").select("*").eq("workspace_id", ws.id).in("status", ["active", "trialing", "past_due"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const { data: current } = await db.from("plans").select("*").eq("id", ws.plan_id).maybeSingle();
 

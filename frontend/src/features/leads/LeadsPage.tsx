@@ -10,8 +10,9 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { cn } from "@/lib/utils";
+import { StartCampaignButton } from "@/features/campaigns/StartCampaignDialog";
 
-type Lead = { id: string; intent: string; summary: string | null; status: "new" | "contacted" | "qualified" | "won" | "lost"; urgency: "low" | "normal" | "high"; source: string; created_at: string; contact: { name: string | null; phone_e164: string | null } | null };
+type Lead = { id: string; intent: string; summary: string | null; status: "new" | "contacted" | "qualified" | "won" | "lost"; urgency: "low" | "normal" | "high"; source: string; created_at: string; contact_id: string | null; contact: { name: string | null; phone_e164: string | null } | null };
 const STAGES: Lead["status"][] = ["new", "contacted", "qualified", "won", "lost"];
 const URGENCY: Record<Lead["urgency"], string> = { high: "bg-destructive/10 text-destructive", normal: "bg-muted text-muted-foreground", low: "bg-muted text-muted-foreground" };
 
@@ -38,8 +39,11 @@ export default function LeadsPage() {
     <>
       <PageHeader title="Leads" description="Customers your agent qualified for you to follow up." />
       <PageBody className="space-y-4">
-        <div className="flex gap-1.5 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-1 gap-1.5 overflow-x-auto">
           {(["all", ...STAGES] as const).map((s) => <button key={s} onClick={() => setStage(s)} className={cn("whitespace-nowrap rounded-full px-3 py-1.5 text-sm capitalize", stage === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{s}{s !== "all" && <span className="ml-1.5 opacity-70">{(data ?? []).filter((l) => l.status === s).length}</span>}</button>)}
+        </div>
+        {(() => { const ids = [...new Set(rows.filter((l) => l.contact?.phone_e164 && l.contact_id && !["won", "lost"].includes(l.status)).map((l) => l.contact_id!))]; return ids.length ? <StartCampaignButton contactIds={ids} goal="lead_follow_up" label="Call these leads" /> : null; })()}
         </div>
         {isLoading ? <Skeleton className="h-64 rounded-xl" /> : !rows.length ? <EmptyState icon={Target} title="No leads yet" description="When customers ask for quotes, visits or callbacks, your agent records them here." /> : (
           <div className="overflow-hidden rounded-xl border bg-card">

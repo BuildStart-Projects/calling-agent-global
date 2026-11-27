@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 type Call = {
   id: string; direction: "inbound" | "outbound" | "auto-callback"; caller_number: string | null; started_at: string | null; duration_seconds: number;
   outcome: string; summary: string | null; transcript: Array<{ role: string; text: string }>; flags: Array<{ claim: string; reason: string }>;
-  recording_key: string | null; contact: { name: string | null } | null; created_at: string;
+  recording_key: string | null; recording_expired_at?: string | null; contact: { name: string | null } | null; created_at: string;
 };
 const OUTCOME: Record<string, { label: string; cls: string }> = {
   answered: { label: "Answered", cls: "bg-success/10 text-success" }, lead: { label: "Lead", cls: "bg-info/10 text-info" },
@@ -113,7 +113,8 @@ function CallDetail({ call }: { call: Call }) {
             <p className="mt-2 text-xs">Add the correct information in Knowledge so your agent gets it right next time.</p>
           </div>
         )}
-        {call.recording_key && <RecordingPlayer callId={call.id} />}
+        {call.recording_key && !call.recording_expired_at && <RecordingPlayer callId={call.id} />}
+        {call.recording_expired_at && <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">The recording and transcript were deleted after your plan's retention period. The summary is kept.</p>}
         {merged.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transcript</p>

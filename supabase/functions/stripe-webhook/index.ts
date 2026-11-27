@@ -3,6 +3,7 @@ import { serveHandler, HttpError, json, log } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { stripe, verifyStripeSignature } from "../_shared/stripe.ts";
 import { notify } from "../_shared/runtime-tools.ts";
+import { syncCreditPause } from "../_shared/credit-pause.ts";
 
 type Db = ReturnType<typeof serviceClient>;
 const iso = (s?: number | null) => (s ? new Date(s * 1000).toISOString() : null);
@@ -90,6 +91,7 @@ async function onTopup(db: Db, s: Record<string, any>) {
   const applied = await rpc(db, "apply_topup", { ws, p_pack: s.metadata.pack_id, p_session: s.id, p_payment_intent: s.payment_intent ?? null, p_amount: s.amount_total, p_currency: s.currency });
   if (applied) {
     const { data: pack } = await db.from("topup_packs").select("credits,validity_days").eq("id", s.metadata.pack_id).single();
+    await syncCreditPause(db, ws).catch(() => null);
     await notify(db, ws, "billing", `💚 ${pack?.credits ?? ""} credits added`, `Thanks! Your top-up is ready to use and valid for ${Math.round((pack?.validity_days ?? 365) / 30)} months.`, "/app/billing");
   }
 }
@@ -109,6 +111,7 @@ async function onInvoicePaid(db: Db, inv: Record<string, any>) {
   });
   if (applied) {
     await db.from("subscriptions").update({ plan_id: plan.id, pending_plan_id: null }).eq("stripe_subscription_id", inv.subscription);
+    await syncCreditPause(db, ws).catch(() => null);
     await notify(db, ws, "billing", `✅ ${plan.name} plan active`, "Your monthly credits have been added.", "/app/billing");
   }
 }

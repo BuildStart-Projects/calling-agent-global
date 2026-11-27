@@ -34,7 +34,8 @@ deno run -A tools/engine-mock/main.ts
 
 ## Environments & secrets
 
-Frontend (Vercel): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV`.
+Frontend (Vercel): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV`, and optionally `VITE_SITE_URL` (custom domain; otherwise
+the Vercel production domain is used for the sitemap, robots.txt and canonical URLs). Company and legal details live in `frontend/src/config/company.ts`.
 
 Edge Function secrets (`npx supabase secrets set --env-file …`):
 
@@ -49,10 +50,33 @@ Edge Function secrets (`npx supabase secrets set --env-file …`):
 
 Never commit secrets — `.env*` files are git-ignored.
 
+## Production backend (self-hosted Supabase "supabase3")
+
+The Global platform runs on the self-hosted instance at `https://supabase3.buildstart.io`
+(`/opt/supabase-project3`, compose project `supabase3`). **The same server hosts other Supabase instances: never
+touch any other folder, compose project or database.**
+
+- Functions: `SSH_KEY=… ./tools/deploy-supabase3.sh functions`. Secrets live only on the server in
+  `/opt/supabase-project3/global-app.env` (chmod 600), loaded by the functions service via `env_file`.
+- Migrations: `SSH_KEY=… DB_PASSWORD=… ./tools/deploy-supabase3.sh migrations` (SSH tunnel to the instance's local pooler port).
+- Vault (`edge_base_url` = `http://api-gw:8000`, `cron_secret`) is set, so pg_cron jobs run.
+- Auth settings (site URL, redirect URLs, SMTP, Google) are in the instance's `.env`; restart only `auth` after changes.
+- Engine URLs for the Go server: `https://supabase3.buildstart.io/functions/v1/engine-webhook` and `/engine-tools`.
+
 ## Background jobs
 
-`pg_cron` (migration 014) calls `campaign-dispatcher` and `messaging-worker` every minute, the compile sweep every 5 minutes,
-and free-plan cycles / lot expiry hourly. Each environment needs the two Vault entries in `supabase/snippets/cron_vault.sql`.
+`pg_cron` jobs (migrations 014 and 017). Each environment needs the two Vault entries in `supabase/snippets/cron_vault.sql`.
+
+| Job | Schedule | Does |
+|---|---|---|
+| `bs-campaign-dispatcher` | every minute | dials campaign targets inside their windows |
+| `bs-messaging-worker` | every minute | sends Messaging Agent replies |
+| `bs-compile-sweep` | every 5 min | recompiles changed agents; resumes agents paused for credits once credits are back |
+| `bs-credit-cycles` | hourly | Free plan cycles, lot expiry, low-balance and top-up-expiry reminders |
+| `bs-retention` | daily 02:41 UTC | expires recordings/transcripts past the plan's `recording_retention_days` |
+| `bs-account-purge` | daily 03:23 UTC | erases workspaces 30 days after the owner asked to delete them |
+
+Agents pause automatically when the balance reaches 0 (the engine's `voice_enabled` goes false) and resume when credits are added.
 
 ## Stripe setup
 

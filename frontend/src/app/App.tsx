@@ -38,6 +38,8 @@ const BillingPage = lazy(() => import("@/features/billing/BillingPage"));
 const CampaignsPage = lazy(() => import("@/features/campaigns/CampaignsPage"));
 const CampaignEditor = lazy(() => import("@/features/campaigns/CampaignEditor"));
 const CampaignDetail = lazy(() => import("@/features/campaigns/CampaignDetail"));
+const UsagePage = lazy(() => import("@/features/usage/UsagePage"));
+const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const AdminHome = lazy(() => import("@/pages/admin/AdminHome"));
 const NotFoundPage = lazy(() => import("@/pages/public/NotFoundPage"));
 
@@ -99,6 +101,8 @@ export default function App() {
                     <Route path="campaigns/:id" element={<CampaignDetail />} />
                     <Route path="campaigns/:id/edit" element={<CampaignEditor />} />
                     <Route path="knowledge" element={<KnowledgePage />} />
+                    <Route path="usage" element={<UsagePage />} />
+                    <Route path="settings" element={<SettingsPage />} />
                     <Route path=":module/*" element={<ModulePage />} />
                   </Route>
                 </Route>

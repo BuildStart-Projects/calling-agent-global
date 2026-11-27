@@ -56,6 +56,12 @@ export default function BillingPage() {
     },
   });
 
+  useEffect(() => {
+    if (window.location.hash !== "#topups") return;
+    const t = setTimeout(() => document.getElementById("topups")?.scrollIntoView({ behavior: "smooth" }), 400);
+    return () => clearTimeout(t);
+  }, []);
+
   // Returning from Stripe Checkout: the webhook grants credits a moment later — poll briefly.
   useEffect(() => {
     const c = params.get("checkout");
@@ -132,7 +138,7 @@ export default function BillingPage() {
           {busy && plans.some((p) => p.id === busy) && <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Opening secure checkout…</p>}
         </section>
 
-        <section>
+        <section id="topups" className="scroll-mt-20">
           <h2 className="text-lg font-semibold">Top up credits</h2>
           <p className="mb-4 text-sm text-muted-foreground">One-time purchase. Valid for 12 months, used after your monthly credits.</p>
           <div className="grid gap-3 sm:grid-cols-3">{(pricing?.packs ?? []).map((p) => (

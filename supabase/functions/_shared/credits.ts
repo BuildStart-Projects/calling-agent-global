@@ -16,6 +16,12 @@ export async function chargeUsage(db: SupabaseClient, p: {
     p_free: p.free ?? false, p_estimated: p.usage?.estimated ?? false,
   });
   if (error) console.error(JSON.stringify({ level: "error", where: "chargeUsage", error: error.message }));
+  const r = data as { credits: number; balance_after: number } | null;
+  if (r && Number(r.balance_after) <= 0 && Number(r.credits) > 0) {
+    // Lazy import avoids a module cycle (compile-agent → credits).
+    const { syncCreditPause } = await import("./credit-pause.ts");
+    await syncCreditPause(db, p.workspaceId).catch((e) => console.error(JSON.stringify({ where: "chargeUsage.pause", error: String(e) })));
+  }
   return data as { credits: number; balance_after: number } | null;
 }
 

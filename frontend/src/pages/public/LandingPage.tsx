@@ -1,3 +1,4 @@
+import { COMPANY } from "@/config/company";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -422,9 +423,9 @@ function Footer() {
         <div className="flex gap-6">
           <Link to="/terms" className="hover:text-ink">Terms</Link>
           <Link to="/privacy" className="hover:text-ink">Privacy</Link>
-          <a href="mailto:support@buildstart.io" className="hover:text-ink">Contact</a>
+          <a href={`mailto:${COMPANY.email}`} className="hover:text-ink">Contact</a>
         </div>
-        <p>© {new Date().getFullYear()} BuildStart</p>
+        <p>© {new Date().getFullYear()} {COMPANY.legalName}</p>
       </div>
     </footer>
   );

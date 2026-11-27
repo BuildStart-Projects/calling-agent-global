@@ -6,9 +6,10 @@ import { engine } from "../_shared/engine.ts";
 serveHandler("recording-proxy", async (req) => {
   const callId = new URL(req.url).searchParams.get("call_id");
   if (!callId) throw new HttpError(400, "invalid", "call_id is required.");
-  const { data: call } = await serviceClient().from("calls").select("agent_id,engine_call_id").eq("id", callId).maybeSingle();
+  const { data: call } = await serviceClient().from("calls").select("agent_id,engine_call_id,recording_expired_at").eq("id", callId).maybeSingle();
   if (!call) throw new HttpError(404, "not_found", "Recording not found.");
   const { agent } = await requireAgentAccess(req, call.agent_id);
+  if (call.recording_expired_at) throw new HttpError(410, "recording_expired", "This recording was deleted after your plan's retention period.");
   if (!agent.engine_session_id) throw new HttpError(404, "not_found", "Recording not available.");
   // Preferred: short-lived public presigned URL from the engine (supports seeking, no proxy bandwidth).
   if (new URL(req.url).searchParams.get("mode") !== "stream") {

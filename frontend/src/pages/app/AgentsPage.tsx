@@ -1,9 +1,14 @@
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Loader2, Pause, Play, Plus } from "lucide-react";
+import { Bot, Loader2, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { PageBody, PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -18,6 +23,16 @@ export default function AgentsPage() {
   const qc = useQueryClient();
   const [confirmPause, setConfirmPause] = useState<AgentSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<AgentSummary | null>(null);
+  const [confirmName, setConfirmName] = useState("");
+  const { role } = useAuth();
+  const canDelete = role === "owner" || role === "admin";
+  const remove = async () => {
+    if (!deleting) return;
+    setBusy(deleting.id);
+    try { await callFunction("account", { action: "delete_agent", agent_id: deleting.id, confirm_name: confirmName }); toast.success(`${deleting.name} deleted`); setDeleting(null); setConfirmName(""); qc.invalidateQueries({ queryKey: ["agents"] }); }
+    catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
+  };
   const control = async (a: AgentSummary, action: "pause" | "resume") => {
     setBusy(a.id);
     try { await callFunction("agent-control", { agent_id: a.id, action }); toast.success(action === "pause" ? "Agent paused" : "Agent is live again"); qc.invalidateQueries({ queryKey: ["agents"] }); }
@@ -36,7 +51,14 @@ export default function AgentsPage() {
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground"><Bot className="h-5 w-5" /></span>
                     <div><p className="font-semibold">{a.name}</p><p className="text-sm capitalize text-muted-foreground">{a.type} agent</p></div>
                   </div>
-                  <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", a.status === "live" ? "bg-success/10 text-success" : a.status === "paused" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")}>{a.status === "live" ? "● Live" : a.status}</span>
+                  <div className="flex items-center gap-1"><span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", a.status === "live" ? "bg-success/10 text-success" : a.status === "paused" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")}>{a.status === "live" ? "● Live" : a.status === "paused" && a.pause_reason === "no_credits" ? "Paused · out of credits" : a.status === "paused" && a.pause_reason === "admin" ? "Paused by BuildStart" : a.status}</span>
+                    {canDelete && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`More actions for ${a.name}`}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end"><DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => { setConfirmName(""); setDeleting(a); }}><Trash2 className="mr-2 h-4 w-4" />Delete agent</DropdownMenuItem></DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
                 </div>
                 <p className={cn("mt-4 text-sm", a.wa_status === "logged_out" ? "text-destructive" : "text-muted-foreground")}>{WA[a.wa_status]}{a.wa_phone ? ` · ${a.wa_phone}` : ""}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -51,6 +73,19 @@ export default function AgentsPage() {
           </div>
         )}
       </PageBody>
+      <Dialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.name}?</DialogTitle>
+            <DialogDescription>This disconnects its WhatsApp number, cancels its campaigns and permanently deletes its knowledge, conversations, calls and bookings. This can't be undone.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5"><p className="text-sm">Type <strong>{deleting?.name}</strong> to confirm</p><Input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} autoComplete="off" aria-label="Agent name" /></div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="destructive" disabled={confirmName.trim() !== deleting?.name.trim() || busy === deleting?.id} onClick={remove}>{busy === deleting?.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete agent</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={Boolean(confirmPause)} onOpenChange={(o) => !o && setConfirmPause(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

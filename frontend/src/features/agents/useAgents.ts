@@ -10,6 +10,7 @@ export type AgentSummary = {
   status: "draft" | "ready" | "live" | "paused";
   wa_status: "not_connected" | "qr" | "connected" | "logged_out";
   wa_phone: string | null;
+  pause_reason?: "user" | "no_credits" | "admin" | null;
   created_at: string;
 };
 
@@ -21,7 +22,7 @@ export function useAgents() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("agents")
-        .select("id,name,type,status,wa_status,wa_phone,created_at")
+        .select("id,name,type,status,pause_reason,wa_status,wa_phone,created_at")
         .eq("workspace_id", workspace!.id)
         .order("created_at", { ascending: true });
       if (error) throw error;

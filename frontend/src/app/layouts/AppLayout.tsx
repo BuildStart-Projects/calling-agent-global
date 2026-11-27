@@ -20,10 +20,17 @@ import { visibleNav, type AgentType, type NavItem } from "@/app/nav";
 import { initials } from "@/lib/format";
 import { useNotifications } from "@/features/notifications/NotificationsPage";
 import { cn } from "@/lib/utils";
+import { CreditBanner, OutOfCreditsModal, WorkspaceBlocked } from "@/features/account/AccountGuards";
 
 const COLLAPSE_KEY = "bs.sidebar.collapsed";
 
 export function AppLayout() {
+  const { workspace } = useAuth();
+  if (workspace && workspace.status !== "active") return <WorkspaceBlocked />;
+  return <ActiveLayout />;
+}
+
+function ActiveLayout() {
   const { data: agents } = useAgents();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
@@ -71,6 +78,8 @@ export function AppLayout() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar onMenu={() => setMoreOpen(true)} />
+          <CreditBanner />
+          <OutOfCreditsModal />
           <main className="flex-1 pb-24 sm:pb-8">
             <AnimatePresence mode="wait">
               <motion.div

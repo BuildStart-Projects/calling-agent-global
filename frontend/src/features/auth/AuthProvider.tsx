@@ -10,7 +10,10 @@ export type Workspace = {
   country: string | null;
   timezone: string;
   currency: string;
-  status: "active" | "suspended";
+  status: "active" | "suspended" | "pending_deletion";
+  locale?: string;
+  notify_email?: string | null;
+  deletion_scheduled_for?: string | null;
   plan_id: string | null;
   plan_period_end?: string | null;
   stripe_customer_id?: string | null;
@@ -33,6 +36,7 @@ type AuthState = {
   workspace: Workspace | null;
   wallet: Wallet | null;
   isPlatformAdmin: boolean;
+  role: "owner" | "admin" | "member" | null;
   emailVerified: boolean;
   signOut: () => Promise<void>;
   refresh: () => void;
@@ -66,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       const { data: membership } = await supabase
         .from("workspace_members")
-        .select("workspace:workspaces(*)")
+        .select("role, workspace:workspaces(*)")
         .eq("user_id", userId!)
         .order("created_at", { ascending: true })
         .limit(1)
@@ -78,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         wallet = (data as Wallet) ?? null;
       }
       const { data: isAdmin } = await supabase.rpc("is_platform_admin");
-      return { workspace, wallet, isPlatformAdmin: Boolean(isAdmin) };
+      return { workspace, wallet, isPlatformAdmin: Boolean(isAdmin), role: (membership?.role ?? null) as AuthState["role"] };
     },
   });
 
@@ -90,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       workspace: meQuery.data?.workspace ?? null,
       wallet: meQuery.data?.wallet ?? null,
       isPlatformAdmin: meQuery.data?.isPlatformAdmin ?? false,
+      role: meQuery.data?.role ?? null,
       emailVerified: Boolean(session?.user?.email_confirmed_at),
       signOut: async () => {
         await supabase.auth.signOut();

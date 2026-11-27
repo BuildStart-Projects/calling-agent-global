@@ -3,6 +3,8 @@ import { z } from "npm:zod@3.25.76";
 import { serveHandler, HttpError, json, readJson } from "../_shared/http.ts";
 import { requirePlatformAdmin } from "../_shared/supabase.ts";
 import { compileAgent } from "../_shared/compile-agent.ts";
+import { stripe } from "../_shared/stripe.ts";
+import { syncCreditPause } from "../_shared/credit-pause.ts";
 
 const money = z.number().int().min(0).max(10_000_000);
 const Feature = z.object({ label: z.string().min(1).max(120), included: z.boolean().default(true), highlight: z.boolean().optional() });
@@ -51,11 +53,17 @@ serveHandler("admin-api", async (req) => {
       }
       const after = must(await db.from("wallet_balance").select("total").eq("workspace_id", body.workspace_id).single()) as { total: number };
       await audit("credits.adjust", "workspace", body.workspace_id, { balance: before.total }, { balance: after.total, amount: body.amount, note: body.note });
+      await syncCreditPause(db, body.workspace_id).catch(() => null);
       return json(req, { balance: after.total });
     }
     case "set_workspace_status": {
-      const before = must(await db.from("workspaces").select("status").eq("id", body.workspace_id).single());
-      must(await db.from("workspaces").update({ status: body.status }).eq("id", body.workspace_id));
+      const before = must(await db.from("workspaces").select("status,deletion_scheduled_for").eq("id", body.workspace_id).single()) as { status: string; deletion_scheduled_for: string | null };
+      must(await db.from("workspaces").update({ status: body.status, ...(body.status === "active" ? { deletion_requested_at: null, deletion_scheduled_for: null, deletion_reason: null } : {}) }).eq("id", body.workspace_id));
+      if (body.status === "active" && before.status === "pending_deletion") {
+        // Restore within the grace period: un-cancel the subscription (WhatsApp must be re-linked by the owner).
+        const { data: subs } = await db.from("subscriptions").select("id,stripe_subscription_id").eq("workspace_id", body.workspace_id).eq("cancel_at_period_end", true).in("status", ["active", "trialing", "past_due"]);
+        for (const s of subs ?? []) if (s.stripe_subscription_id) { await stripe("POST", `/subscriptions/${s.stripe_subscription_id}`, { cancel_at_period_end: false }).catch(() => null); await db.from("subscriptions").update({ cancel_at_period_end: false, pending_plan_id: null }).eq("id", s.id); }
+      }
       if (body.status === "suspended") {
         const { data: agents } = await db.from("agents").select("id").eq("workspace_id", body.workspace_id).eq("status", "live");
         for (const a of agents ?? []) { await db.from("agents").update({ status: "paused", pause_reason: "admin" }).eq("id", a.id); await compileAgent(db, a.id, { pushEngine: true }).catch(() => null); }
