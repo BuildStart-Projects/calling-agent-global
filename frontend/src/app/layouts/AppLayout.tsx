@@ -58,10 +58,11 @@ function ActiveLayout() {
             collapsed ? "w-[72px]" : "w-[72px] lg:w-64",
           )}
         >
-          <div className="flex h-16 items-center gap-2 px-4">
-            <Link to="/app" className="flex items-center gap-2" aria-label="BuildStart home">
-              <Logo variant="icon" className="h-8 w-8" />
-              {!collapsed && <Logo className="hidden h-6 lg:block" />}
+          <div className={cn("flex h-16 items-center", collapsed ? "justify-center px-2" : "justify-center px-2 lg:justify-start lg:px-5")}>
+            <Link to="/" className="group flex items-center rounded-lg p-1 outline-none transition focus-visible:ring-2 focus-visible:ring-brand-500" aria-label="BuildStart home page">
+              {/* Full logo (mark + wordmark) when there's room; the mark alone on the narrow rail. */}
+              <Logo variant="icon" className={cn("h-9 w-9 transition-transform duration-200 group-hover:scale-105", !collapsed && "lg:hidden")} />
+              {!collapsed && <Logo tight className="hidden h-9 transition-opacity duration-200 group-hover:opacity-85 lg:block" />}
             </Link>
           </div>
           <SidebarNav items={items} collapsed={collapsed} />
@@ -99,7 +100,7 @@ function ActiveLayout() {
         <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
           <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="h-16 justify-center border-b px-4">
-              <SheetTitle><Logo /></SheetTitle>
+              <SheetTitle><Link to="/" aria-label="BuildStart home page" className="inline-flex rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><Logo tight className="h-8" /></Link></SheetTitle>
             </SheetHeader>
             <div onClick={() => setMoreOpen(false)}>
               <SidebarNav items={items} collapsed={false} forceLabels />
@@ -217,7 +218,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <Button variant="ghost" size="icon" className="sm:hidden" onClick={onMenu} aria-label="Open menu">
         <Menu className="h-5 w-5" />
       </Button>
-      <Link to="/app" className="sm:hidden"><Logo className="h-6" /></Link>
+      <Link to="/" className="rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:hidden" aria-label="BuildStart home page"><Logo tight className="h-7" /></Link>
       <div className="ml-auto flex items-center gap-2">
         <Button asChild size="sm" variant="outline" className="hidden md:inline-flex">
           <Link to="/app/new"><Plus className="mr-1 h-4 w-4" />New agent</Link>
